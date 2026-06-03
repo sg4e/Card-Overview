@@ -33,7 +33,6 @@ namespace card_overview_wpf
         private Settings settings;
         private About about;
 
-        private List<List<ButtonControl>> buttons;
         private List<List<CardView>> cards;
         private HashSet<int> ownedCardIds = new HashSet<int>();
         private int bewdCount = 0;
@@ -47,10 +46,18 @@ namespace card_overview_wpf
         private string backgroundColor = "#00FF00";
         private Color tbBackgroundColor = Colors.White;
         private Color tbTextColor = Colors.Black;
+        private int? selectedTeamId;
 
         public MainWindow()
         {
             InitializeComponent();
+        }
+
+
+
+        public int? SelectedTeamId
+        {
+            get { return selectedTeamId; }
         }
 
 
@@ -144,7 +151,6 @@ namespace card_overview_wpf
                 ClearAll();
 
                 cards = new List<List<CardView>>();
-                buttons = new List<List<ButtonControl>>();
 
                 using (BinaryReader reader = new BinaryReader(stream))
                 {
@@ -155,7 +161,6 @@ namespace card_overview_wpf
 
                     for (int i = 0; i < cols; i++)
                     {
-                        List<ButtonControl> colB = new List<ButtonControl>();
                         List<CardView> colC = new List<CardView>();
 
                         for (int j = 0; j < rows; j++)
@@ -165,23 +170,13 @@ namespace card_overview_wpf
                             cv.SetTextColor(tbTextColor);
                             SetCardImage(cv, reader.ReadInt32());
                             cv.SetVisibility(reader.ReadBoolean());
-                            //bool vis = reader.ReadBoolean();
-                            //cv.SetVisibility(vis);
-                            ButtonControl bc = new ButtonControl(cv);
-                            //bc.SetVisibility(vis);
-                            colB.Add(bc);
                             colC.Add(cv);
-
-                            Canvas.SetLeft(bc, 100 * i);
-                            Canvas.SetTop(bc, cardHeight * j);
-                            mainCanvas.Children.Add(bc);
 
                             Canvas.SetLeft(cv, cardWidth * i);
                             Canvas.SetTop(cv, cardHeight * j);
                             cardWindow.AddCardView(cv);
                         }
 
-                        buttons.Add(colB);
                         cards.Add(colC);
                     }
 
@@ -234,7 +229,6 @@ namespace card_overview_wpf
             cols++;
             Resize();
 
-            List<ButtonControl> colB = new List<ButtonControl>();
             List<CardView> colC = new List<CardView>();
 
             int i = cols - 1;
@@ -243,20 +237,13 @@ namespace card_overview_wpf
                 CardView cv = new CardView(this);
                 cv.SetTbBackgroundColor(tbBackgroundColor);
                 cv.SetTextColor(tbTextColor);
-                ButtonControl bc = new ButtonControl(cv);
-                colB.Add(bc);
                 colC.Add(cv);
-
-                Canvas.SetLeft(bc, 100 * i);
-                Canvas.SetTop(bc, cardHeight * j);
-                mainCanvas.Children.Add(bc);
 
                 Canvas.SetLeft(cv, cardWidth * i);
                 Canvas.SetTop(cv, cardHeight * j);
                 cardWindow.AddCardView(cv);
             }
 
-            buttons.Add(colB);
             cards.Add(colC);
         }
 
@@ -266,12 +253,10 @@ namespace card_overview_wpf
             int i = cols - 1;
             for (int j = 0; j < rows; j++)
             {
-                mainCanvas.Children.Remove(buttons[i][j]);
                 cardWindow.RemoveCardView(cards[i][j]);
             }
 
             //Remove column from both lists
-            buttons.RemoveAt(cols - 1);
             cards.RemoveAt(cols - 1);
 
             //Resize
@@ -290,13 +275,7 @@ namespace card_overview_wpf
                 CardView cv = new CardView(this);
                 cv.SetTbBackgroundColor(tbBackgroundColor);
                 cv.SetTextColor(tbTextColor);
-                ButtonControl bc = new ButtonControl(cv);
-                buttons[i].Add(bc);
                 cards[i].Add(cv);
-
-                Canvas.SetLeft(bc, 100 * i);
-                Canvas.SetTop(bc, cardHeight * j);
-                mainCanvas.Children.Add(bc);
 
                 Canvas.SetLeft(cv, cardWidth * i);
                 Canvas.SetTop(cv, cardHeight * j);
@@ -310,11 +289,9 @@ namespace card_overview_wpf
             int j = rows - 1;
             for (int i = 0; i < cols; i++)
             {
-                mainCanvas.Children.Remove(buttons[i][j]);
                 cardWindow.RemoveCardView(cards[i][j]);
 
-                //Remove row from both lists
-                buttons[i].RemoveAt(j);
+                //Remove row from card list
                 cards[i].RemoveAt(j);
             }
 
@@ -611,9 +588,44 @@ namespace card_overview_wpf
             }
         }
 
+
+        private void InitializeTeamAutoTrack()
+        {
+            try
+            {
+                TeamHundoApiClient apiClient = TeamHundoApiClient.FromConfiguration();
+                IList<TeamJson> teams = apiClient.GetTeams();
+
+                Console.WriteLine("Teams:");
+                for (int i = 0; i < teams.Count; i++)
+                {
+                    Console.WriteLine((i + 1) + ". " + teams[i].Name);
+                }
+
+                Console.Error.Write("Auto-track for which team? ");
+                string selectionText = Console.ReadLine();
+                int selection;
+                if (!int.TryParse(selectionText, out selection) || selection < 1 || selection > teams.Count)
+                {
+                    Console.Error.WriteLine("Invalid team selection.");
+                    selectedTeamId = null;
+                    return;
+                }
+
+                TeamJson selectedTeam = teams[selection - 1];
+                selectedTeamId = selectedTeam.SelectedTeamId;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Unable to initialize team auto-tracking: " + ex.Message);
+                selectedTeamId = null;
+            }
+        }
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LoadCardList();
+            InitializeTeamAutoTrack();
             LoadSettings();
             foreach (Window window in System.Windows.Application.Current.Windows)
             {
@@ -626,12 +638,10 @@ namespace card_overview_wpf
 
             Resize();
 
-            buttons = new List<List<ButtonControl>>();
             cards = new List<List<CardView>>();
 
             for (int i = 0; i < cols; i++)
             {
-                List<ButtonControl> colB = new List<ButtonControl>();
                 List<CardView> colC = new List<CardView>();
 
                 for (int j = 0; j < rows; j++)
@@ -639,20 +649,13 @@ namespace card_overview_wpf
                     CardView cv = new CardView(this);
                     cv.SetTbBackgroundColor(tbBackgroundColor);
                     cv.SetTextColor(tbTextColor);
-                    ButtonControl bc = new ButtonControl(cv);
-                    colB.Add(bc);
                     colC.Add(cv);
-
-                    Canvas.SetLeft(bc, 100 * i);
-                    Canvas.SetTop(bc, cardHeight * j);
-                    mainCanvas.Children.Add(bc);
 
                     Canvas.SetLeft(cv, cardWidth * i);
                     Canvas.SetTop(cv, cardHeight * j);
                     cardWindow.AddCardView(cv);
                 }
 
-                buttons.Add(colB);
                 cards.Add(colC);
             }
         }

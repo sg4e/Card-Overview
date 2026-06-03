@@ -35,26 +35,6 @@ namespace card_overview_wpf
 
         }
 
-        public void Increment()
-        {
-            window.IncrementTrackingValue(cardId);
-        }
-
-        public void Decrement()
-        {
-            window.DecrementTrackingValue(cardId);
-        }
-
-        public void RefreshTrackingValue()
-        {
-            SetTrackingValue(window.GetTrackingValue(cardId));
-        }
-
-        public void SetTrackingValue(string value)
-        {
-            textBoxCount.Text = value;
-        }
-
         public void SetTbBackgroundColor(Color color)
         {
             textBoxCount.Background = new SolidColorBrush(color);
