@@ -440,37 +440,6 @@ namespace card_overview_wpf
             return "0";
         }
 
-        public void IncrementTrackingValue(int cardId)
-        {
-            if (cardId == 1)
-            {
-                bewdCount++;
-            }
-            else if (cardId > 0)
-            {
-                ownedCardIds.Add(cardId);
-            }
-
-            RefreshCardViews(cardId);
-        }
-
-        public void DecrementTrackingValue(int cardId)
-        {
-            if (cardId == 1)
-            {
-                if (bewdCount > 0)
-                {
-                    bewdCount--;
-                }
-            }
-            else if (cardId > 0)
-            {
-                ownedCardIds.Remove(cardId);
-            }
-
-            RefreshCardViews(cardId);
-        }
-
         public void RefreshCardViews(int cardId)
         {
             if (cards == null)
@@ -621,12 +590,14 @@ namespace card_overview_wpf
                 IList<TeamJson> teams = teamHundoApiClient.GetTeams();
 
                 Console.WriteLine("Teams:");
+                Console.WriteLine();
                 for (int i = 0; i < teams.Count; i++)
                 {
                     Console.WriteLine((i + 1) + ". " + teams[i].Name);
+                    Console.WriteLine();
                 }
 
-                Console.Error.Write("Auto-track for which team? ");
+                Console.Write("Auto-track for which team? ");
                 string selectionText = Console.ReadLine();
                 int selection;
                 if (!int.TryParse(selectionText, out selection) || selection < 1 || selection > teams.Count)
@@ -637,7 +608,7 @@ namespace card_overview_wpf
                 }
 
                 TeamJson selectedTeam = teams[selection - 1];
-                selectedTeamId = selectedTeam.SelectedTeamId;
+                selectedTeamId = selectedTeam.id;
             }
             catch (Exception ex)
             {
@@ -655,15 +626,15 @@ namespace card_overview_wpf
 
             try
             {
-                IList<CardAcquisition> libraryContents = teamHundoApiClient.GetLibraryContents(selectedTeamId.Value);
+                IList<int> libraryContents = teamHundoApiClient.GetLibraryContents(selectedTeamId.Value);
                 LibraryUpdate library = teamHundoApiClient.GetLibrary(selectedTeamId.Value);
 
                 ownedCardIds.Clear();
-                foreach (CardAcquisition acquisition in libraryContents)
+                foreach (int cardId in libraryContents)
                 {
-                    if (acquisition != null && acquisition.cardId > 0)
+                    if (cardId > 0)
                     {
-                        ownedCardIds.Add(acquisition.cardId);
+                        ownedCardIds.Add(cardId);
                     }
                 }
 

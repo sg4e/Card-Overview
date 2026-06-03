@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
@@ -42,10 +42,10 @@ namespace card_overview_wpf
             return teams ?? new List<TeamJson>();
         }
 
-        public IList<CardAcquisition> GetLibraryContents(int teamId)
+        public IList<int> GetLibraryContents(int teamId)
         {
-            List<CardAcquisition> cardAcquisitions = GetJson<List<CardAcquisition>>("/api/library_contents/" + teamId);
-            return cardAcquisitions ?? new List<CardAcquisition>();
+            List<int> cardIds = GetJson<List<int>>("/api/library_contents/" + teamId);
+            return cardIds ?? new List<int>();
         }
 
         public LibraryUpdate GetLibrary(int teamId)
@@ -329,13 +329,12 @@ namespace card_overview_wpf
 
     public class TeamJson
     {
-        public int TeamId { get; set; }
-        public int Id { get; set; }
-        public string Name { get; set; }
+        public int id { get; set; }
+        public string name { get; set; }
 
-        public int SelectedTeamId
+        public string Name
         {
-            get { return TeamId != 0 ? TeamId : Id; }
+            get { return name; }
         }
     }
 
@@ -353,7 +352,17 @@ namespace card_overview_wpf
 
     public class ApiErrorJson
     {
-        public string Message { get; set; }
-        public string Error { get; set; }
+        public string message { get; set; }
+        public string error { get; set; }
+
+        public string Message
+        {
+            get { return message; }
+        }
+
+        public string Error
+        {
+            get { return error; }
+        }
     }
 }
