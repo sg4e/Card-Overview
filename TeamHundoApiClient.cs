@@ -3,13 +3,23 @@ using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.Net;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
+using WebSocket4Net;
 
 namespace card_overview_wpf
 {
-    public class TeamHundoApiClient
+    public class TeamHundoApiClient : IDisposable
     {
+        private const int FirehoseReconnectDelayMilliseconds = 2000;
+
         private readonly string baseApiUrl;
+        private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
+        private CancellationTokenSource firehoseCancellationTokenSource;
+        private Task firehoseTask;
+        private WebSocket firehoseSocket;
+        private readonly object firehoseLock = new object();
 
         public TeamHundoApiClient(string baseApiUrl)
         {
@@ -39,7 +49,6 @@ namespace card_overview_wpf
                 using (StreamReader reader = new StreamReader(responseStream))
                 {
                     string json = reader.ReadToEnd();
-                    JavaScriptSerializer serializer = new JavaScriptSerializer();
                     List<TeamJson> teams = serializer.Deserialize<List<TeamJson>>(json);
                     return teams ?? new List<TeamJson>();
                 }
@@ -48,6 +57,201 @@ namespace card_overview_wpf
             {
                 throw new InvalidOperationException(BuildApiErrorMessage(ex), ex);
             }
+        }
+
+        public void StartTeamFirehose(Action<LibraryUpdate> updateReceived)
+        {
+            if (updateReceived == null)
+            {
+                throw new ArgumentNullException("updateReceived");
+            }
+
+            StopTeamFirehose();
+
+            lock (firehoseLock)
+            {
+                firehoseCancellationTokenSource = new CancellationTokenSource();
+                firehoseTask = Task.Run(() => RunTeamFirehoseLoop(updateReceived, firehoseCancellationTokenSource.Token));
+            }
+        }
+
+        public void StopTeamFirehose()
+        {
+            CancellationTokenSource cancellationTokenSource;
+            Task runningTask;
+            WebSocket socket;
+
+            lock (firehoseLock)
+            {
+                cancellationTokenSource = firehoseCancellationTokenSource;
+                runningTask = firehoseTask;
+                socket = firehoseSocket;
+
+                firehoseCancellationTokenSource = null;
+                firehoseTask = null;
+                firehoseSocket = null;
+            }
+
+            if (cancellationTokenSource != null)
+            {
+                cancellationTokenSource.Cancel();
+            }
+
+            if (socket != null)
+            {
+                socket.Close();
+            }
+
+            if (runningTask != null)
+            {
+                try
+                {
+                    runningTask.Wait(TimeSpan.FromSeconds(5));
+                }
+                catch (AggregateException)
+                {
+                }
+            }
+
+            if (cancellationTokenSource != null)
+            {
+                cancellationTokenSource.Dispose();
+            }
+        }
+
+        public void Dispose()
+        {
+            StopTeamFirehose();
+        }
+
+        private async Task RunTeamFirehoseLoop(Action<LibraryUpdate> updateReceived, CancellationToken cancellationToken)
+        {
+            string firehoseUrl = BuildTeamFirehoseUrl();
+
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                WebSocket socket = null;
+                TaskCompletionSource<bool> disconnected = new TaskCompletionSource<bool>();
+
+                try
+                {
+                    socket = new WebSocket(firehoseUrl);
+                    socket.MessageReceived += (sender, e) => HandleFirehoseMessage(e.Message, updateReceived);
+                    socket.Closed += (sender, e) => disconnected.TrySetResult(true);
+                    socket.Error += (sender, e) => disconnected.TrySetResult(true);
+
+                    lock (firehoseLock)
+                    {
+                        if (cancellationToken.IsCancellationRequested)
+                        {
+                            socket.Close();
+                            break;
+                        }
+
+                        firehoseSocket = socket;
+                    }
+
+                    socket.Open();
+                    await disconnected.Task.ConfigureAwait(false);
+                }
+                catch (ObjectDisposedException)
+                {
+                    if (!cancellationToken.IsCancellationRequested)
+                    {
+                        await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.Error.WriteLine("Team firehose connection failed: " + ex.Message);
+                    await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
+                }
+                finally
+                {
+                    lock (firehoseLock)
+                    {
+                        if (firehoseSocket == socket)
+                        {
+                            firehoseSocket = null;
+                        }
+                    }
+
+                    if (socket != null)
+                    {
+                        socket.Close();
+                    }
+                }
+
+                if (!cancellationToken.IsCancellationRequested)
+                {
+                    await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
+
+        private void HandleFirehoseMessage(string message, Action<LibraryUpdate> updateReceived)
+        {
+            if (string.IsNullOrWhiteSpace(message))
+            {
+                return;
+            }
+
+            try
+            {
+                LibraryUpdate update = serializer.Deserialize<LibraryUpdate>(message);
+                if (update != null)
+                {
+                    updateReceived(update);
+                }
+            }
+            catch (ArgumentException ex)
+            {
+                Console.Error.WriteLine("Unable to deserialize team firehose update: " + ex.Message);
+            }
+            catch (InvalidOperationException ex)
+            {
+                Console.Error.WriteLine("Unable to deserialize team firehose update: " + ex.Message);
+            }
+        }
+
+        private static async Task DelayBeforeReconnect(CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(FirehoseReconnectDelayMilliseconds, cancellationToken).ConfigureAwait(false);
+            }
+            catch (TaskCanceledException)
+            {
+            }
+        }
+
+        private string BuildTeamFirehoseUrl()
+        {
+            Uri baseUri = new Uri(baseApiUrl);
+            UriBuilder builder = new UriBuilder(baseUri);
+            if (string.Equals(builder.Scheme, "https", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.Scheme = "wss";
+            }
+            else if (string.Equals(builder.Scheme, "http", StringComparison.OrdinalIgnoreCase))
+            {
+                builder.Scheme = "ws";
+            }
+
+            builder.Path = CombineUrlPaths(builder.Path, "/firehose/team");
+            builder.Query = string.Empty;
+            builder.Fragment = string.Empty;
+            return builder.Uri.ToString();
+        }
+
+        private static string CombineUrlPaths(string basePath, string endpointPath)
+        {
+            if (string.IsNullOrWhiteSpace(basePath) || basePath == "/")
+            {
+                return endpointPath;
+            }
+
+            return basePath.TrimEnd('/') + endpointPath;
         }
 
         private static string BuildApiErrorMessage(WebException ex)
@@ -117,6 +321,18 @@ namespace card_overview_wpf
         {
             get { return TeamId != 0 ? TeamId : Id; }
         }
+    }
+
+    public class LibraryUpdate
+    {
+        public int teamId { get; set; }
+        public int bewdCount { get; set; }
+        public List<NewAcquisition> newAcquisitions { get; set; }
+    }
+
+    public class NewAcquisition
+    {
+        public int cardId { get; set; }
     }
 
     public class ApiErrorJson
