@@ -6,9 +6,5 @@
              xmlns:local="clr-namespace:card_overview_wpf"
              mc:Ignorable="d" 
              d:DesignHeight="100" d:DesignWidth="100">
-    <Grid>
-        <Button x:Name="buttonPlus" Content="+1" HorizontalAlignment="Left" Margin="10,0,0,0" VerticalAlignment="Top" Width="80" Click="buttonPlus_Click"/>
-        <Button x:Name="buttonMinus" Content="-1" HorizontalAlignment="Left" Margin="10,25,0,0" VerticalAlignment="Top" Width="80" Click="buttonMinus_Click"/>
-
-    </Grid>
+    <Grid />
 </UserControl>

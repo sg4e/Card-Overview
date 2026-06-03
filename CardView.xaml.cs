@@ -35,19 +35,6 @@ namespace card_overview_wpf
 
         }
 
-        public void Increment()
-        {
-            textBoxCount.Text = (int.Parse(textBoxCount.Text) + 1).ToString();
-        }
-
-        public void Decrement()
-        {
-            if (int.Parse(textBoxCount.Text) > 0)
-            {
-                textBoxCount.Text = (int.Parse(textBoxCount.Text) - 1).ToString();
-            }
-        }
-
         public void SetTbBackgroundColor(Color color)
         {
             textBoxCount.Background = new SolidColorBrush(color);
