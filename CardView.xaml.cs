@@ -35,6 +35,16 @@ namespace card_overview_wpf
 
         }
 
+        public void RefreshTrackingValue()
+        {
+            SetTrackingValue(window.GetTrackingValue(cardId));
+        }
+
+        public void SetTrackingValue(string value)
+        {
+            textBoxCount.Text = value;
+        }
+
         public void SetTbBackgroundColor(Color color)
         {
             textBoxCount.Background = new SolidColorBrush(color);
@@ -54,6 +64,7 @@ namespace card_overview_wpf
                     string s = window.GetIconLocation() + window.GetCardFilename(id);
                     imageCard.Source = new BitmapImage(new Uri(@s));
                     cardId = id;
+                    RefreshTrackingValue();
                 }
             }
             catch (FileNotFoundException e)
