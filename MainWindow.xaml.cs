@@ -45,10 +45,18 @@ namespace card_overview_wpf
         private string backgroundColor = "#00FF00";
         private Color tbBackgroundColor = Colors.White;
         private Color tbTextColor = Colors.Black;
+        private int? selectedTeamId;
 
         public MainWindow()
         {
             InitializeComponent();
+        }
+
+
+
+        public int? SelectedTeamId
+        {
+            get { return selectedTeamId; }
         }
 
 
@@ -538,9 +546,44 @@ namespace card_overview_wpf
             }
         }
 
+
+        private void InitializeTeamAutoTrack()
+        {
+            try
+            {
+                TeamHundoApiClient apiClient = TeamHundoApiClient.FromConfiguration();
+                IList<TeamJson> teams = apiClient.GetTeams();
+
+                Console.WriteLine("Teams:");
+                for (int i = 0; i < teams.Count; i++)
+                {
+                    Console.WriteLine((i + 1) + ". " + teams[i].Name);
+                }
+
+                Console.Error.Write("Auto-track for which team? ");
+                string selectionText = Console.ReadLine();
+                int selection;
+                if (!int.TryParse(selectionText, out selection) || selection < 1 || selection > teams.Count)
+                {
+                    Console.Error.WriteLine("Invalid team selection.");
+                    selectedTeamId = null;
+                    return;
+                }
+
+                TeamJson selectedTeam = teams[selection - 1];
+                selectedTeamId = selectedTeam.SelectedTeamId;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Unable to initialize team auto-tracking: " + ex.Message);
+                selectedTeamId = null;
+            }
+        }
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LoadCardList();
+            InitializeTeamAutoTrack();
             LoadSettings();
             foreach (Window window in System.Windows.Application.Current.Windows)
             {
