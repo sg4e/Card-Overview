@@ -38,7 +38,24 @@ namespace card_overview_wpf
 
         public IList<TeamJson> GetTeams()
         {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(baseApiUrl + "/api/teams");
+            List<TeamJson> teams = GetJson<List<TeamJson>>("/api/teams");
+            return teams ?? new List<TeamJson>();
+        }
+
+        public IList<CardAcquisition> GetLibraryContents(int teamId)
+        {
+            List<CardAcquisition> cardAcquisitions = GetJson<List<CardAcquisition>>("/api/library_contents/" + teamId);
+            return cardAcquisitions ?? new List<CardAcquisition>();
+        }
+
+        public LibraryUpdate GetLibrary(int teamId)
+        {
+            return GetJson<LibraryUpdate>("/api/library/" + teamId);
+        }
+
+        private T GetJson<T>(string endpointPath)
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(baseApiUrl + endpointPath);
             request.Method = "GET";
             request.Accept = "application/json";
 
@@ -49,8 +66,7 @@ namespace card_overview_wpf
                 using (StreamReader reader = new StreamReader(responseStream))
                 {
                     string json = reader.ReadToEnd();
-                    List<TeamJson> teams = serializer.Deserialize<List<TeamJson>>(json);
-                    return teams ?? new List<TeamJson>();
+                    return serializer.Deserialize<T>(json);
                 }
             }
             catch (WebException ex)
@@ -327,10 +343,10 @@ namespace card_overview_wpf
     {
         public int teamId { get; set; }
         public int bewdCount { get; set; }
-        public List<NewAcquisition> newAcquisitions { get; set; }
+        public List<CardAcquisition> newAcquisitions { get; set; }
     }
 
-    public class NewAcquisition
+    public class CardAcquisition
     {
         public int cardId { get; set; }
     }

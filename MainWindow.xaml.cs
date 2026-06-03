@@ -490,6 +490,22 @@ namespace card_overview_wpf
             }
         }
 
+        private void RefreshAllCardViews()
+        {
+            if (cards == null)
+            {
+                return;
+            }
+
+            foreach (List<CardView> column in cards)
+            {
+                foreach (CardView cv in column)
+                {
+                    cv.RefreshTrackingValue();
+                }
+            }
+        }
+
         public void SetCardImage(CardView cardView, int cardId)
         {
             cardView.SetImage(cardId);
@@ -630,6 +646,40 @@ namespace card_overview_wpf
             }
         }
 
+        private void LoadSelectedTeamLibrarySnapshot()
+        {
+            if (teamHundoApiClient == null || !selectedTeamId.HasValue)
+            {
+                return;
+            }
+
+            try
+            {
+                IList<CardAcquisition> libraryContents = teamHundoApiClient.GetLibraryContents(selectedTeamId.Value);
+                LibraryUpdate library = teamHundoApiClient.GetLibrary(selectedTeamId.Value);
+
+                ownedCardIds.Clear();
+                foreach (CardAcquisition acquisition in libraryContents)
+                {
+                    if (acquisition != null && acquisition.cardId > 0)
+                    {
+                        ownedCardIds.Add(acquisition.cardId);
+                    }
+                }
+
+                if (library != null)
+                {
+                    bewdCount = library.bewdCount;
+                }
+
+                RefreshAllCardViews();
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("Unable to load selected team library data: " + ex.Message);
+            }
+        }
+
         private void ApplyLibraryUpdate(LibraryUpdate update)
         {
             if (update == null || !selectedTeamId.HasValue || update.teamId != selectedTeamId.Value)
@@ -647,7 +697,7 @@ namespace card_overview_wpf
                     return;
                 }
 
-                foreach (NewAcquisition acquisition in update.newAcquisitions)
+                foreach (CardAcquisition acquisition in update.newAcquisitions)
                 {
                     if (acquisition != null && acquisition.cardId > 0)
                     {
@@ -703,6 +753,7 @@ namespace card_overview_wpf
                 cards.Add(colC);
             }
 
+            LoadSelectedTeamLibrarySnapshot();
             StartTeamFirehose();
         }
     }
