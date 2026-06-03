@@ -33,7 +33,18 @@ namespace card_overview_wpf
 
         public static TeamHundoApiClient FromConfiguration()
         {
-            return new TeamHundoApiClient(ConfigurationManager.AppSettings["TeamHundoBaseApiUrl"]);
+            return new TeamHundoApiClient(GetConfiguredBaseApiUrl());
+        }
+
+        private static string GetConfiguredBaseApiUrl()
+        {
+            string[] commandLineArgs = Environment.GetCommandLineArgs();
+            if (commandLineArgs.Length > 1 && !string.IsNullOrWhiteSpace(commandLineArgs[1]))
+            {
+                return commandLineArgs[1];
+            }
+
+            return ConfigurationManager.AppSettings["TeamHundoBaseApiUrl"];
         }
 
         public IList<TeamJson> GetTeams()
