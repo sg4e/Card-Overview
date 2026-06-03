@@ -33,6 +33,8 @@ namespace card_overview_wpf
         private Settings settings;
         private About about;
 
+        private TeamHundoApiClient teamHundoApiClient;
+
         private List<List<CardView>> cards;
         private HashSet<int> ownedCardIds = new HashSet<int>();
         private int bewdCount = 0;
@@ -302,6 +304,12 @@ namespace card_overview_wpf
 
         private void Window_Closing(object sender, System.ComponentModel.CancelEventArgs e)
         {
+            if (teamHundoApiClient != null)
+            {
+                teamHundoApiClient.Dispose();
+                teamHundoApiClient = null;
+            }
+
             if (cardWindow != null)
             {
                 cardWindow.Close();
@@ -593,8 +601,8 @@ namespace card_overview_wpf
         {
             try
             {
-                TeamHundoApiClient apiClient = TeamHundoApiClient.FromConfiguration();
-                IList<TeamJson> teams = apiClient.GetTeams();
+                teamHundoApiClient = TeamHundoApiClient.FromConfiguration();
+                IList<TeamJson> teams = teamHundoApiClient.GetTeams();
 
                 Console.WriteLine("Teams:");
                 for (int i = 0; i < teams.Count; i++)
@@ -619,6 +627,42 @@ namespace card_overview_wpf
             {
                 Console.Error.WriteLine("Unable to initialize team auto-tracking: " + ex.Message);
                 selectedTeamId = null;
+            }
+        }
+
+        private void ApplyLibraryUpdate(LibraryUpdate update)
+        {
+            if (update == null || !selectedTeamId.HasValue || update.teamId != selectedTeamId.Value)
+            {
+                return;
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                bewdCount = update.bewdCount;
+                RefreshCardViews(1);
+
+                if (update.newAcquisitions == null)
+                {
+                    return;
+                }
+
+                foreach (NewAcquisition acquisition in update.newAcquisitions)
+                {
+                    if (acquisition != null && acquisition.cardId > 0)
+                    {
+                        ownedCardIds.Add(acquisition.cardId);
+                        RefreshCardViews(acquisition.cardId);
+                    }
+                }
+            }));
+        }
+
+        private void StartTeamFirehose()
+        {
+            if (teamHundoApiClient != null && selectedTeamId.HasValue)
+            {
+                teamHundoApiClient.StartTeamFirehose(ApplyLibraryUpdate);
             }
         }
 
@@ -658,6 +702,8 @@ namespace card_overview_wpf
 
                 cards.Add(colC);
             }
+
+            StartTeamFirehose();
         }
     }
 }
