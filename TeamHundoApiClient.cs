@@ -13,6 +13,7 @@ namespace card_overview_wpf
     public class TeamHundoApiClient : IDisposable
     {
         private const int FirehoseReconnectDelayMilliseconds = 2000;
+        private const string DefaultBaseApiUrl = "https://hundo.maika.moe";
 
         private readonly string baseApiUrl;
         private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
@@ -44,7 +45,13 @@ namespace card_overview_wpf
                 return commandLineArgs[1];
             }
 
-            return ConfigurationManager.AppSettings["TeamHundoBaseApiUrl"];
+            string configuredBaseApiUrl = ConfigurationManager.AppSettings["TeamHundoBaseApiUrl"];
+            if (!string.IsNullOrWhiteSpace(configuredBaseApiUrl))
+            {
+                return configuredBaseApiUrl;
+            }
+
+            return DefaultBaseApiUrl;
         }
 
         public IList<TeamJson> GetTeams()
