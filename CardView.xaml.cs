@@ -37,15 +37,22 @@ namespace card_overview_wpf
 
         public void Increment()
         {
-            textBoxCount.Text = (int.Parse(textBoxCount.Text) + 1).ToString();
+            window.IncrementTrackingValue(cardId);
         }
 
         public void Decrement()
         {
-            if (int.Parse(textBoxCount.Text) > 0)
-            {
-                textBoxCount.Text = (int.Parse(textBoxCount.Text) - 1).ToString();
-            }
+            window.DecrementTrackingValue(cardId);
+        }
+
+        public void RefreshTrackingValue()
+        {
+            SetTrackingValue(window.GetTrackingValue(cardId));
+        }
+
+        public void SetTrackingValue(string value)
+        {
+            textBoxCount.Text = value;
         }
 
         public void SetTbBackgroundColor(Color color)
@@ -67,6 +74,7 @@ namespace card_overview_wpf
                     string s = window.GetIconLocation() + window.GetCardFilename(id);
                     imageCard.Source = new BitmapImage(new Uri(@s));
                     cardId = id;
+                    RefreshTrackingValue();
                 }
             }
             catch (FileNotFoundException e)

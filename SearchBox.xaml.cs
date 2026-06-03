@@ -68,7 +68,7 @@ namespace card_overview_wpf
         {
             if(card != null)
             {
-                card.SetImage(window.GetCardId(listBoxResults.SelectedItem.ToString()));
+                window.SetCardImage(card, window.GetCardId(listBoxResults.SelectedItem.ToString()));
                 Close();
             }
         }

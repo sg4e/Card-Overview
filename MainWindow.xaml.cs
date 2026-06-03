@@ -35,6 +35,8 @@ namespace card_overview_wpf
 
         private List<List<ButtonControl>> buttons;
         private List<List<CardView>> cards;
+        private HashSet<int> ownedCardIds = new HashSet<int>();
+        private int bewdCount = 0;
         private int cols = 1;
         private int rows = 7;
 
@@ -161,7 +163,7 @@ namespace card_overview_wpf
                             CardView cv = new CardView(this);
                             cv.SetTbBackgroundColor(tbBackgroundColor);
                             cv.SetTextColor(tbTextColor);
-                            cv.SetImage(reader.ReadInt32());
+                            SetCardImage(cv, reader.ReadInt32());
                             cv.SetVisibility(reader.ReadBoolean());
                             //bool vis = reader.ReadBoolean();
                             //cv.SetVisibility(vis);
@@ -436,6 +438,77 @@ namespace card_overview_wpf
                     cv.SetTextColor(color);
                 }
             }
+        }
+
+        public string GetTrackingValue(int cardId)
+        {
+            if (cardId == 1)
+            {
+                return bewdCount.ToString();
+            }
+
+            if (ownedCardIds.Contains(cardId))
+            {
+                return "✓";
+            }
+
+            return "0";
+        }
+
+        public void IncrementTrackingValue(int cardId)
+        {
+            if (cardId == 1)
+            {
+                bewdCount++;
+            }
+            else if (cardId > 0)
+            {
+                ownedCardIds.Add(cardId);
+            }
+
+            RefreshCardViews(cardId);
+        }
+
+        public void DecrementTrackingValue(int cardId)
+        {
+            if (cardId == 1)
+            {
+                if (bewdCount > 0)
+                {
+                    bewdCount--;
+                }
+            }
+            else if (cardId > 0)
+            {
+                ownedCardIds.Remove(cardId);
+            }
+
+            RefreshCardViews(cardId);
+        }
+
+        public void RefreshCardViews(int cardId)
+        {
+            if (cards == null)
+            {
+                return;
+            }
+
+            foreach (List<CardView> column in cards)
+            {
+                foreach (CardView cv in column)
+                {
+                    if (cv.GetCardId() == cardId)
+                    {
+                        cv.RefreshTrackingValue();
+                    }
+                }
+            }
+        }
+
+        public void SetCardImage(CardView cardView, int cardId)
+        {
+            cardView.SetImage(cardId);
+            cardView.RefreshTrackingValue();
         }
 
         public string GetIconLocation()
