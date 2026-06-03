@@ -1,0 +1,40 @@
+name: Build executable
+
+on:
+  push:
+    branches:
+      - '**'
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Card Overview Team Hundo
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up MSBuild
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Set up NuGet
+        uses: NuGet/setup-nuget@v2
+
+      - name: Install .NET Framework 4.5.2 Developer Pack
+        shell: powershell
+        run: choco install netfx-4.5.2-devpack -y --no-progress
+
+      - name: Restore NuGet packages
+        run: nuget restore packages.config -PackagesDirectory ..\packages
+
+      - name: Build executable
+        run: msbuild "card overview wpf.csproj" /p:Configuration=Release /p:Platform=AnyCPU /p:RestorePackages=false
+
+      - name: Upload executable artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Card Overview Team Hundo
+          path: bin\Release\Card Overview Team Hundo.exe
+          if-no-files-found: error
