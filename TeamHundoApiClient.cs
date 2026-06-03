@@ -1,8 +1,9 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.Net;
+using System.Threading.Tasks;
 using System.Web.Script.Serialization;
 
 namespace card_overview_wpf
@@ -28,7 +29,30 @@ namespace card_overview_wpf
 
         public IList<TeamJson> GetTeams()
         {
-            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(baseApiUrl + "/api/teams");
+            List<TeamJson> teams = GetJson<List<TeamJson>>("/api/teams");
+            return teams ?? new List<TeamJson>();
+        }
+
+        public Task<IList<CardAcquisition>> GetLibraryContentsAsync(int teamId)
+        {
+            return Task<IList<CardAcquisition>>.Factory.StartNew(delegate
+            {
+                List<CardAcquisition> contents = GetJson<List<CardAcquisition>>("/api/library_contents/" + teamId);
+                return (IList<CardAcquisition>)(contents ?? new List<CardAcquisition>());
+            });
+        }
+
+        public Task<LibraryUpdate> GetLibraryAsync(int teamId)
+        {
+            return Task<LibraryUpdate>.Factory.StartNew(delegate
+            {
+                return GetJson<LibraryUpdate>("/api/library/" + teamId) ?? new LibraryUpdate();
+            });
+        }
+
+        private T GetJson<T>(string path)
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(baseApiUrl + path);
             request.Method = "GET";
             request.Accept = "application/json";
 
@@ -40,8 +64,7 @@ namespace card_overview_wpf
                 {
                     string json = reader.ReadToEnd();
                     JavaScriptSerializer serializer = new JavaScriptSerializer();
-                    List<TeamJson> teams = serializer.Deserialize<List<TeamJson>>(json);
-                    return teams ?? new List<TeamJson>();
+                    return serializer.Deserialize<T>(json);
                 }
             }
             catch (WebException ex)
@@ -117,6 +140,18 @@ namespace card_overview_wpf
         {
             get { return TeamId != 0 ? TeamId : Id; }
         }
+    }
+
+    public class LibraryUpdate
+    {
+        public int TeamId { get; set; }
+        public int BewdCount { get; set; }
+        public IList<CardAcquisition> NewAcquisitions { get; set; }
+    }
+
+    public class CardAcquisition
+    {
+        public int CardId { get; set; }
     }
 
     public class ApiErrorJson

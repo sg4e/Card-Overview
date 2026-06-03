@@ -482,6 +482,22 @@ namespace card_overview_wpf
             }
         }
 
+        public void RefreshAllCardViews()
+        {
+            if (cards == null)
+            {
+                return;
+            }
+
+            foreach (List<CardView> column in cards)
+            {
+                foreach (CardView cv in column)
+                {
+                    cv.RefreshTrackingValue();
+                }
+            }
+        }
+
         public void SetCardImage(CardView cardView, int cardId)
         {
             cardView.SetImage(cardId);
@@ -589,6 +605,24 @@ namespace card_overview_wpf
         }
 
 
+        private void LoadSelectedTeamLibrary(TeamHundoApiClient apiClient, int teamId)
+        {
+            Task<IList<CardAcquisition>> libraryContentsTask = apiClient.GetLibraryContentsAsync(teamId);
+            Task<LibraryUpdate> libraryTask = apiClient.GetLibraryAsync(teamId);
+
+            Task.WaitAll(libraryContentsTask, libraryTask);
+
+            ownedCardIds = new HashSet<int>(
+                libraryContentsTask.Result
+                    .Where(acquisition => acquisition != null && acquisition.CardId > 0)
+                    .Select(acquisition => acquisition.CardId));
+
+            LibraryUpdate library = libraryTask.Result;
+            bewdCount = library != null ? library.BewdCount : 0;
+
+            RefreshAllCardViews();
+        }
+
         private void InitializeTeamAutoTrack()
         {
             try
@@ -614,6 +648,7 @@ namespace card_overview_wpf
 
                 TeamJson selectedTeam = teams[selection - 1];
                 selectedTeamId = selectedTeam.SelectedTeamId;
+                LoadSelectedTeamLibrary(apiClient, selectedTeamId.Value);
             }
             catch (Exception ex)
             {
