@@ -1,25 +1,32 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Configuration;
 using System.IO;
 using System.Net;
+using System.Net.WebSockets;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Web.Script.Serialization;
-using WebSocket4Net;
 
 namespace card_overview_wpf
 {
     public class TeamHundoApiClient : IDisposable
     {
         private const int FirehoseReconnectDelayMilliseconds = 2000;
+        private const string DefaultBaseApiUrl = "https://hundo.maika.moe";
 
         private readonly string baseApiUrl;
         private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
         private CancellationTokenSource firehoseCancellationTokenSource;
         private Task firehoseTask;
-        private WebSocket firehoseSocket;
+        private ClientWebSocket firehoseSocket;
         private readonly object firehoseLock = new object();
+
+        static TeamHundoApiClient()
+        {
+            ServicePointManager.SecurityProtocol |= (SecurityProtocolType)3072;
+        }
 
         public TeamHundoApiClient(string baseApiUrl)
         {
@@ -33,7 +40,24 @@ namespace card_overview_wpf
 
         public static TeamHundoApiClient FromConfiguration()
         {
-            return new TeamHundoApiClient(ConfigurationManager.AppSettings["TeamHundoBaseApiUrl"]);
+            return new TeamHundoApiClient(GetConfiguredBaseApiUrl());
+        }
+
+        private static string GetConfiguredBaseApiUrl()
+        {
+            string[] commandLineArgs = Environment.GetCommandLineArgs();
+            if (commandLineArgs.Length > 1 && !string.IsNullOrWhiteSpace(commandLineArgs[1]))
+            {
+                return commandLineArgs[1];
+            }
+
+            string configuredBaseApiUrl = ConfigurationManager.AppSettings["TeamHundoBaseApiUrl"];
+            if (!string.IsNullOrWhiteSpace(configuredBaseApiUrl))
+            {
+                return configuredBaseApiUrl;
+            }
+
+            return DefaultBaseApiUrl;
         }
 
         public IList<TeamJson> GetTeams()
@@ -42,10 +66,10 @@ namespace card_overview_wpf
             return teams ?? new List<TeamJson>();
         }
 
-        public IList<CardAcquisition> GetLibraryContents(int teamId)
+        public IList<int> GetLibraryContents(int teamId)
         {
-            List<CardAcquisition> cardAcquisitions = GetJson<List<CardAcquisition>>("/api/library_contents/" + teamId);
-            return cardAcquisitions ?? new List<CardAcquisition>();
+            List<int> cardIds = GetJson<List<int>>("/api/library_contents/" + teamId);
+            return cardIds ?? new List<int>();
         }
 
         public LibraryUpdate GetLibrary(int teamId)
@@ -95,7 +119,7 @@ namespace card_overview_wpf
         {
             CancellationTokenSource cancellationTokenSource;
             Task runningTask;
-            WebSocket socket;
+            ClientWebSocket socket;
 
             lock (firehoseLock)
             {
@@ -115,7 +139,8 @@ namespace card_overview_wpf
 
             if (socket != null)
             {
-                socket.Close();
+                socket.Abort();
+                socket.Dispose();
             }
 
             if (runningTask != null)
@@ -142,33 +167,42 @@ namespace card_overview_wpf
 
         private async Task RunTeamFirehoseLoop(Action<LibraryUpdate> updateReceived, CancellationToken cancellationToken)
         {
-            string firehoseUrl = BuildTeamFirehoseUrl();
+            Uri firehoseUri = new Uri(BuildTeamFirehoseUrl());
 
             while (!cancellationToken.IsCancellationRequested)
             {
-                WebSocket socket = null;
-                TaskCompletionSource<bool> disconnected = new TaskCompletionSource<bool>();
+                ClientWebSocket socket = null;
 
                 try
                 {
-                    socket = new WebSocket(firehoseUrl);
-                    socket.MessageReceived += (sender, e) => HandleFirehoseMessage(e.Message, updateReceived);
-                    socket.Closed += (sender, e) => disconnected.TrySetResult(true);
-                    socket.Error += (sender, e) => disconnected.TrySetResult(true);
+                    socket = new ClientWebSocket();
 
                     lock (firehoseLock)
                     {
                         if (cancellationToken.IsCancellationRequested)
                         {
-                            socket.Close();
+                            socket.Dispose();
                             break;
                         }
 
                         firehoseSocket = socket;
                     }
 
-                    socket.Open();
-                    await disconnected.Task.ConfigureAwait(false);
+                    await socket.ConnectAsync(firehoseUri, cancellationToken).ConfigureAwait(false);
+
+                    while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
+                    {
+                        string message = await ReceiveTextMessage(socket, cancellationToken).ConfigureAwait(false);
+                        if (message == null)
+                        {
+                            break;
+                        }
+
+                        HandleFirehoseMessage(message, updateReceived);
+                    }
+                }
+                catch (OperationCanceledException)
+                {
                 }
                 catch (ObjectDisposedException)
                 {
@@ -194,7 +228,8 @@ namespace card_overview_wpf
 
                     if (socket != null)
                     {
-                        socket.Close();
+                        socket.Abort();
+                        socket.Dispose();
                     }
                 }
 
@@ -202,6 +237,32 @@ namespace card_overview_wpf
                 {
                     await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
                 }
+            }
+        }
+
+        private static async Task<string> ReceiveTextMessage(ClientWebSocket socket, CancellationToken cancellationToken)
+        {
+            byte[] buffer = new byte[8192];
+
+            using (MemoryStream messageStream = new MemoryStream())
+            {
+                WebSocketReceiveResult result;
+                do
+                {
+                    result = await socket.ReceiveAsync(new ArraySegment<byte>(buffer), cancellationToken).ConfigureAwait(false);
+                    if (result.MessageType == WebSocketMessageType.Close)
+                    {
+                        return null;
+                    }
+
+                    if (result.MessageType == WebSocketMessageType.Text && result.Count > 0)
+                    {
+                        messageStream.Write(buffer, 0, result.Count);
+                    }
+                }
+                while (!result.EndOfMessage);
+
+                return Encoding.UTF8.GetString(messageStream.ToArray());
             }
         }
 
@@ -311,7 +372,7 @@ namespace card_overview_wpf
             string detail = null;
             if (error != null)
             {
-                detail = !string.IsNullOrWhiteSpace(error.Message) ? error.Message : error.Error;
+                detail = !string.IsNullOrWhiteSpace(error.message) ? error.message : error.error;
             }
 
             if (string.IsNullOrWhiteSpace(detail))
@@ -329,14 +390,8 @@ namespace card_overview_wpf
 
     public class TeamJson
     {
-        public int TeamId { get; set; }
-        public int Id { get; set; }
-        public string Name { get; set; }
-
-        public int SelectedTeamId
-        {
-            get { return TeamId != 0 ? TeamId : Id; }
-        }
+        public int id { get; set; }
+        public string name { get; set; }
     }
 
     public class LibraryUpdate
@@ -353,7 +408,7 @@ namespace card_overview_wpf
 
     public class ApiErrorJson
     {
-        public string Message { get; set; }
-        public string Error { get; set; }
+        public string message { get; set; }
+        public string error { get; set; }
     }
 }
