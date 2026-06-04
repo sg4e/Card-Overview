@@ -46,14 +46,6 @@
       <HintPath>..\packages\CsvHelper.2.16.0.0\lib\net45\CsvHelper.dll</HintPath>
       <Private>True</Private>
     </Reference>
-    <Reference Include="SuperSocket.ClientEngine">
-      <HintPath>..\packages\SuperSocket.ClientEngine.Core.0.10.0\lib\net45\SuperSocket.ClientEngine.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
-    <Reference Include="WebSocket4Net">
-      <HintPath>..\packages\WebSocket4Net.0.15.2\lib\net45\WebSocket4Net.dll</HintPath>
-      <Private>True</Private>
-    </Reference>
     <Reference Include="System" />
     <Reference Include="System.Configuration" />
     <Reference Include="System.Data" />
@@ -164,12 +156,18 @@
   <ItemGroup>
     <Resource Include="icon.ico" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="..\packages\CsvHelper.2.16.0.0\lib\net45\CsvHelper.dll">
+      <Link>CsvHelper.dll</Link>
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <!-- To modify your build process, add your task inside one of the targets below and uncomment it. 
-       Other similar extension points exist, see Microsoft.Common.targets.
-  <Target Name="BeforeBuild">
+  <Target Name="CreateReleaseZip" AfterTargets="Build" Condition="'$(Configuration)' == 'Release'">
+    <PropertyGroup>
+      <ReleaseZipPath>$(TargetDir)..\$(AssemblyName).zip</ReleaseZipPath>
+    </PropertyGroup>
+    <Delete Files="$(ReleaseZipPath)" Condition="Exists('$(ReleaseZipPath)')" />
+    <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -Command &quot;Compress-Archive -Path '$(TargetDir)*' -DestinationPath '$(ReleaseZipPath)' -Force&quot;" />
   </Target>
-  <Target Name="AfterBuild">
-  </Target>
-  -->
 </Project>
