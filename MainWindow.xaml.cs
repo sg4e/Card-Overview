@@ -50,6 +50,7 @@ namespace card_overview_wpf
         private Color tbBackgroundColor = Colors.White;
         private Color tbTextColor = Colors.Black;
         private int? selectedTeamId;
+        private string selectedTeamName;
 
         public MainWindow()
         {
@@ -594,6 +595,7 @@ namespace card_overview_wpf
             teamListBox.ItemsSource = null;
             connectedTeams = new List<TeamJson>();
             selectedTeamId = null;
+            selectedTeamName = null;
             SetTeamStatus("Connecting to Team Hundo...");
 
             if (teamHundoApiClient != null)
@@ -638,6 +640,7 @@ namespace card_overview_wpf
             }
 
             selectedTeamId = selectedTeam.id;
+            selectedTeamName = selectedTeam.name;
             setTeamButton.IsEnabled = false;
             connectButton.IsEnabled = false;
             teamUrlTextBox.IsEnabled = false;
@@ -652,6 +655,7 @@ namespace card_overview_wpf
             else
             {
                 selectedTeamId = null;
+                selectedTeamName = null;
                 connectButton.IsEnabled = true;
                 teamUrlTextBox.IsEnabled = true;
                 teamListBox.IsEnabled = true;
@@ -739,8 +743,41 @@ namespace card_overview_wpf
         {
             if (teamHundoApiClient != null && selectedTeamId.HasValue)
             {
-                teamHundoApiClient.StartTeamFirehose(ApplyLibraryUpdate);
+                teamHundoApiClient.StartTeamFirehose(ApplyLibraryUpdate, HandleFirehoseStatusChanged);
             }
+        }
+
+        private void HandleFirehoseStatusChanged(FirehoseStatusEventArgs statusEventArgs)
+        {
+            if (statusEventArgs == null)
+            {
+                return;
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                string teamName = string.IsNullOrWhiteSpace(selectedTeamName) ? "selected team" : selectedTeamName;
+
+                if (statusEventArgs.Status == FirehoseStatus.Connected)
+                {
+                    SetTeamStatus("Auto-tracking " + teamName + ".");
+                }
+                else if (statusEventArgs.Status == FirehoseStatus.Reconnecting)
+                {
+                    SetTeamStatus("Auto-tracking " + teamName + " — Reconnecting... (attempt " + statusEventArgs.ReconnectAttempt + " of " + statusEventArgs.MaximumReconnectAttempts + ")");
+                }
+                else if (statusEventArgs.Status == FirehoseStatus.Failed)
+                {
+                    SetTeamStatus("Auto-tracking " + teamName + " stopped. " + statusEventArgs.Message);
+                    MessageBox.Show(
+                        this,
+                        statusEventArgs.Message + Environment.NewLine + Environment.NewLine + "Card Overview will now exit.",
+                        "Team Hundo Connection Lost",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Error);
+                    Application.Current.Shutdown();
+                }
+            }));
         }
 
         private class TeamLibrarySnapshot
