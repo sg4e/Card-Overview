@@ -14,6 +14,7 @@ namespace card_overview_wpf
     public class TeamHundoApiClient : IDisposable
     {
         private const int FirehoseReconnectDelayMilliseconds = 2000;
+        private const int MaximumFirehoseReconnectAttempts = 30;
         public const string DefaultBaseApiUrl = "https://hundo.maika.moe";
 
         private readonly string baseApiUrl;
@@ -101,6 +102,11 @@ namespace card_overview_wpf
 
         public void StartTeamFirehose(Action<LibraryUpdate> updateReceived)
         {
+            StartTeamFirehose(updateReceived, null);
+        }
+
+        public void StartTeamFirehose(Action<LibraryUpdate> updateReceived, Action<FirehoseStatusEventArgs> statusChanged)
+        {
             if (updateReceived == null)
             {
                 throw new ArgumentNullException("updateReceived");
@@ -111,7 +117,7 @@ namespace card_overview_wpf
             lock (firehoseLock)
             {
                 firehoseCancellationTokenSource = new CancellationTokenSource();
-                firehoseTask = Task.Run(() => RunTeamFirehoseLoop(updateReceived, firehoseCancellationTokenSource.Token));
+                firehoseTask = Task.Run(() => RunTeamFirehoseLoop(updateReceived, statusChanged, firehoseCancellationTokenSource.Token));
             }
         }
 
@@ -165,13 +171,15 @@ namespace card_overview_wpf
             StopTeamFirehose();
         }
 
-        private async Task RunTeamFirehoseLoop(Action<LibraryUpdate> updateReceived, CancellationToken cancellationToken)
+        private async Task RunTeamFirehoseLoop(Action<LibraryUpdate> updateReceived, Action<FirehoseStatusEventArgs> statusChanged, CancellationToken cancellationToken)
         {
             Uri firehoseUri = new Uri(BuildTeamFirehoseUrl());
+            int reconnectAttempt = 0;
 
             while (!cancellationToken.IsCancellationRequested)
             {
                 ClientWebSocket socket = null;
+                string disconnectReason = "The Team Hundo websocket connection was closed unexpectedly.";
 
                 try
                 {
@@ -189,12 +197,15 @@ namespace card_overview_wpf
                     }
 
                     await socket.ConnectAsync(firehoseUri, cancellationToken).ConfigureAwait(false);
+                    reconnectAttempt = 0;
+                    NotifyFirehoseStatus(statusChanged, FirehoseStatus.Connected, "Team Hundo websocket connected.", reconnectAttempt);
 
                     while (socket.State == WebSocketState.Open && !cancellationToken.IsCancellationRequested)
                     {
                         string message = await ReceiveTextMessage(socket, cancellationToken).ConfigureAwait(false);
                         if (message == null)
                         {
+                            disconnectReason = "The Team Hundo websocket connection was closed by the server.";
                             break;
                         }
 
@@ -203,18 +214,21 @@ namespace card_overview_wpf
                 }
                 catch (OperationCanceledException)
                 {
+                    break;
                 }
-                catch (ObjectDisposedException)
+                catch (ObjectDisposedException ex)
                 {
-                    if (!cancellationToken.IsCancellationRequested)
+                    if (cancellationToken.IsCancellationRequested)
                     {
-                        await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
+                        break;
                     }
+
+                    disconnectReason = ex.Message;
                 }
                 catch (Exception ex)
                 {
+                    disconnectReason = ex.Message;
                     Console.Error.WriteLine("Team firehose connection failed: " + ex.Message);
-                    await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
                 }
                 finally
                 {
@@ -233,10 +247,37 @@ namespace card_overview_wpf
                     }
                 }
 
-                if (!cancellationToken.IsCancellationRequested)
+                if (cancellationToken.IsCancellationRequested)
                 {
-                    await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
+                    break;
                 }
+
+                reconnectAttempt++;
+                if (reconnectAttempt > MaximumFirehoseReconnectAttempts)
+                {
+                    NotifyFirehoseStatus(
+                        statusChanged,
+                        FirehoseStatus.Failed,
+                        "Unable to reconnect to the Team Hundo websocket after " + MaximumFirehoseReconnectAttempts + " attempts. Last error: " + disconnectReason,
+                        reconnectAttempt);
+                    break;
+                }
+
+                NotifyFirehoseStatus(
+                    statusChanged,
+                    FirehoseStatus.Reconnecting,
+                    "Team Hundo websocket disconnected: " + disconnectReason + " Reconnecting... (attempt " + reconnectAttempt + " of " + MaximumFirehoseReconnectAttempts + ")",
+                    reconnectAttempt);
+
+                await DelayBeforeReconnect(cancellationToken).ConfigureAwait(false);
+            }
+        }
+
+        private static void NotifyFirehoseStatus(Action<FirehoseStatusEventArgs> statusChanged, FirehoseStatus status, string message, int reconnectAttempt)
+        {
+            if (statusChanged != null)
+            {
+                statusChanged(new FirehoseStatusEventArgs(status, message, reconnectAttempt, MaximumFirehoseReconnectAttempts));
             }
         }
 
@@ -386,6 +427,30 @@ namespace card_overview_wpf
 
             return "Team API request failed with HTTP " + (int)response.StatusCode + " " + response.StatusCode + ": " + detail;
         }
+    }
+
+
+    public enum FirehoseStatus
+    {
+        Connected,
+        Reconnecting,
+        Failed
+    }
+
+    public class FirehoseStatusEventArgs : EventArgs
+    {
+        public FirehoseStatusEventArgs(FirehoseStatus status, string message, int reconnectAttempt, int maximumReconnectAttempts)
+        {
+            Status = status;
+            Message = message;
+            ReconnectAttempt = reconnectAttempt;
+            MaximumReconnectAttempts = maximumReconnectAttempts;
+        }
+
+        public FirehoseStatus Status { get; private set; }
+        public string Message { get; private set; }
+        public int ReconnectAttempt { get; private set; }
+        public int MaximumReconnectAttempts { get; private set; }
     }
 
     public class TeamJson
