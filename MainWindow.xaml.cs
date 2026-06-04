@@ -34,6 +34,7 @@ namespace card_overview_wpf
         private About about;
 
         private TeamHundoApiClient teamHundoApiClient;
+        private IList<TeamJson> connectedTeams = new List<TeamJson>();
 
         private List<List<CardView>> cards;
         private HashSet<int> ownedCardIds = new HashSet<int>();
@@ -108,24 +109,6 @@ namespace card_overview_wpf
         {
             cardWindow.Width = (cols * cardWidth) + 17;
             cardWindow.Height = (rows * cardHeight) + 40;
-
-            if ((cols * cardWidth) + 8 > 300)
-            {
-                Width = (cols * cardWidth) + 8;
-            }
-            else
-            {
-                Width = 300;
-            }
-
-            if ((rows * cardHeight) + 60 > 300)
-            {
-                Height = (rows * cardHeight) + 60;
-            }
-            else
-            {
-                Height = 300;
-            }
         }
 
         private void MenuItem_Click(object sender, RoutedEventArgs e) //Open
@@ -194,7 +177,6 @@ namespace card_overview_wpf
 
         private void ClearAll()
         {
-            mainCanvas.Children.Clear();
         }
 
         private void MenuItem_Click_1(object sender, RoutedEventArgs e) //Save
@@ -582,55 +564,127 @@ namespace card_overview_wpf
         }
 
 
-        private void InitializeTeamAutoTrack()
+        private async void ConnectButton_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                teamHundoApiClient = TeamHundoApiClient.FromConfiguration();
-                IList<TeamJson> teams = teamHundoApiClient.GetTeams();
-
-                Console.WriteLine("Teams:");
-                Console.WriteLine();
-                for (int i = 0; i < teams.Count; i++)
-                {
-                    Console.WriteLine((i + 1) + ". " + teams[i].name);
-                    Console.WriteLine();
-                }
-
-                Console.Write("Auto-track for which team? ");
-                string selectionText = Console.ReadLine();
-                int selection;
-                if (!int.TryParse(selectionText, out selection) || selection < 1 || selection > teams.Count)
-                {
-                    Console.Error.WriteLine("Invalid team selection.");
-                    selectedTeamId = null;
-                    return;
-                }
-
-                TeamJson selectedTeam = teams[selection - 1];
-                selectedTeamId = selectedTeam.id;
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine("Unable to initialize team auto-tracking: " + ex.Message);
-                selectedTeamId = null;
-            }
+            await ConnectToTeamHundoAsync();
         }
 
-        private void LoadSelectedTeamLibrarySnapshot()
+        private void TeamListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (teamHundoApiClient == null || !selectedTeamId.HasValue)
+            setTeamButton.IsEnabled = teamListBox.SelectedItem is TeamJson && !selectedTeamId.HasValue;
+        }
+
+        private async void SetTeamButton_Click(object sender, RoutedEventArgs e)
+        {
+            TeamJson selectedTeam = teamListBox.SelectedItem as TeamJson;
+            if (selectedTeam == null)
             {
+                SetTeamStatus("Choose a team before setting auto-tracking.");
                 return;
             }
 
+            await SetSelectedTeamAsync(selectedTeam);
+        }
+
+        private async Task ConnectToTeamHundoAsync()
+        {
+            string baseApiUrl = teamUrlTextBox.Text;
+            connectButton.IsEnabled = false;
+            setTeamButton.IsEnabled = false;
+            teamListBox.ItemsSource = null;
+            connectedTeams = new List<TeamJson>();
+            selectedTeamId = null;
+            SetTeamStatus("Connecting to Team Hundo...");
+
+            if (teamHundoApiClient != null)
+            {
+                teamHundoApiClient.Dispose();
+                teamHundoApiClient = null;
+            }
+
             try
             {
-                IList<int> libraryContents = teamHundoApiClient.GetLibraryContents(selectedTeamId.Value);
-                LibraryUpdate library = teamHundoApiClient.GetLibrary(selectedTeamId.Value);
+                TeamHundoApiClient client = new TeamHundoApiClient(baseApiUrl);
+                teamHundoApiClient = client;
+                IList<TeamJson> teams = await Task.Run(() => client.GetTeams());
+
+                connectedTeams = teams;
+                teamListBox.ItemsSource = connectedTeams;
+
+                SetTeamStatus("Connected. Select a team, then click Set Team to begin auto-tracking.");
+                setTeamButton.IsEnabled = teamListBox.SelectedItem is TeamJson;
+            }
+            catch (Exception ex)
+            {
+                SetTeamStatus("Unable to connect: " + ex.Message);
+                if (teamHundoApiClient != null)
+                {
+                    teamHundoApiClient.Dispose();
+                    teamHundoApiClient = null;
+                }
+            }
+            finally
+            {
+                connectButton.IsEnabled = !selectedTeamId.HasValue;
+            }
+        }
+
+        private async Task SetSelectedTeamAsync(TeamJson selectedTeam)
+        {
+            if (teamHundoApiClient == null)
+            {
+                SetTeamStatus("Connect before setting a team.");
+                return;
+            }
+
+            selectedTeamId = selectedTeam.id;
+            setTeamButton.IsEnabled = false;
+            connectButton.IsEnabled = false;
+            teamUrlTextBox.IsEnabled = false;
+            teamListBox.IsEnabled = false;
+            SetTeamStatus("Loading " + selectedTeam.name + " library...");
+
+            if (await LoadSelectedTeamLibrarySnapshotAsync())
+            {
+                StartTeamFirehose();
+                SetTeamStatus("Auto-tracking " + selectedTeam.name + ".");
+            }
+            else
+            {
+                selectedTeamId = null;
+                connectButton.IsEnabled = true;
+                teamUrlTextBox.IsEnabled = true;
+                teamListBox.IsEnabled = true;
+                setTeamButton.IsEnabled = teamListBox.SelectedItem is TeamJson;
+            }
+        }
+
+        private void SetTeamStatus(string message)
+        {
+            teamStatusTextBlock.Text = message;
+        }
+
+        private async Task<bool> LoadSelectedTeamLibrarySnapshotAsync()
+        {
+            if (teamHundoApiClient == null || !selectedTeamId.HasValue)
+            {
+                return false;
+            }
+
+            try
+            {
+                int teamId = selectedTeamId.Value;
+                TeamLibrarySnapshot snapshot = await Task.Run(() =>
+                {
+                    return new TeamLibrarySnapshot
+                    {
+                        LibraryContents = teamHundoApiClient.GetLibraryContents(teamId),
+                        Library = teamHundoApiClient.GetLibrary(teamId)
+                    };
+                });
 
                 ownedCardIds.Clear();
-                foreach (int cardId in libraryContents)
+                foreach (int cardId in snapshot.LibraryContents)
                 {
                     if (cardId > 0)
                     {
@@ -638,16 +692,18 @@ namespace card_overview_wpf
                     }
                 }
 
-                if (library != null)
+                if (snapshot.Library != null)
                 {
-                    bewdCount = library.bewdCount;
+                    bewdCount = snapshot.Library.bewdCount;
                 }
 
                 RefreshAllCardViews();
+                return true;
             }
             catch (Exception ex)
             {
-                Console.Error.WriteLine("Unable to load selected team library data: " + ex.Message);
+                SetTeamStatus("Unable to load selected team library data: " + ex.Message);
+                return false;
             }
         }
 
@@ -687,10 +743,16 @@ namespace card_overview_wpf
             }
         }
 
+        private class TeamLibrarySnapshot
+        {
+            public IList<int> LibraryContents { get; set; }
+            public LibraryUpdate Library { get; set; }
+        }
+
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
             LoadCardList();
-            InitializeTeamAutoTrack();
+            teamUrlTextBox.Text = TeamHundoApiClient.DefaultBaseApiUrl;
             LoadSettings();
             foreach (Window window in System.Windows.Application.Current.Windows)
             {
@@ -724,8 +786,7 @@ namespace card_overview_wpf
                 cards.Add(colC);
             }
 
-            LoadSelectedTeamLibrarySnapshot();
-            StartTeamFirehose();
+            SetTeamStatus("Connect to Team Hundo, choose a team, then set it to begin auto-tracking.");
         }
     }
 }
