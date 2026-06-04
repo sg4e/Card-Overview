@@ -8,7 +8,7 @@ Forked by sg4e to implement auto-tracking for FM Team Hundo
 First, download the original version of the program if you don't have it already:
 https://github.com/fraserelliott/Card-Overview/releases/tag/v1.1.3
 
-Then, download the [latest release of this fork](https://github.com/sg4e/Card-Overview/releases/latest), extract it, and then drop `Card Overview Team Hundo.exe` into the original version's directory, like this:
+Then, download the [latest release of this fork](https://github.com/sg4e/Card-Overview/releases/latest) and drop it into the original version's directory, like this:
 
 ![Directory containing both the original application and "Card Overview Team Hundo.exe"](directory_tree.png)
 
