@@ -593,7 +593,7 @@ namespace card_overview_wpf
                 Console.WriteLine();
                 for (int i = 0; i < teams.Count; i++)
                 {
-                    Console.WriteLine((i + 1) + ". " + teams[i].Name);
+                    Console.WriteLine((i + 1) + ". " + teams[i].name);
                     Console.WriteLine();
                 }
 

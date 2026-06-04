@@ -372,7 +372,7 @@ namespace card_overview_wpf
             string detail = null;
             if (error != null)
             {
-                detail = !string.IsNullOrWhiteSpace(error.Message) ? error.Message : error.Error;
+                detail = !string.IsNullOrWhiteSpace(error.message) ? error.message : error.error;
             }
 
             if (string.IsNullOrWhiteSpace(detail))
@@ -392,11 +392,6 @@ namespace card_overview_wpf
     {
         public int id { get; set; }
         public string name { get; set; }
-
-        public string Name
-        {
-            get { return name; }
-        }
     }
 
     public class LibraryUpdate
@@ -415,15 +410,5 @@ namespace card_overview_wpf
     {
         public string message { get; set; }
         public string error { get; set; }
-
-        public string Message
-        {
-            get { return message; }
-        }
-
-        public string Error
-        {
-            get { return error; }
-        }
     }
 }
