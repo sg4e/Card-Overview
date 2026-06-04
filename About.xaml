@@ -20,6 +20,9 @@
                     <Run Text="Twitter - @fraserelliott" />
                     <LineBreak />
                     <Run Text="Email - fraserelliott@hotmail.com" />
+                    <LineBreak />
+                    <LineBreak />
+                    <Run Text="FM Team Hundo autotracking was added by sg4e." />
                 </Paragraph>
             </FlowDocument>
         </RichTextBox>
