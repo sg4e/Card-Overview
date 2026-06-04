@@ -5,7 +5,7 @@
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:card_overview_wpf"
         mc:Ignorable="d"
-        Title="Card Overview" Height="300" Width="300" Closing="Window_Closing" ResizeMode="NoResize"
+        Title="Card Overview" Height="360" Width="420" Closing="Window_Closing" ResizeMode="NoResize"
         ShowInTaskbar="True" Loaded="Window_Loaded">
     <DockPanel>
         <Menu DockPanel.Dock="Top" Height="20">
@@ -24,6 +24,34 @@
             <MenuItem Header="About" Click="MenuItem_Click_7" />
             <MenuItem Header="Settings" Click="MenuItem_Click_6" />
         </Menu>
-        <Canvas Name="mainCanvas" />
+        <Grid Margin="12">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+
+            <TextBlock Grid.Row="0" Grid.Column="0" Margin="0,0,8,0" VerticalAlignment="Center" Text="URL" />
+            <TextBox x:Name="teamUrlTextBox" Grid.Row="0" Grid.Column="1" Margin="0,0,8,0" MinWidth="220"
+                     Text="https://hundo.maika.moe" VerticalContentAlignment="Center" />
+            <Button x:Name="connectButton" Grid.Row="0" Grid.Column="2" MinWidth="80" Padding="8,2"
+                    Content="Connect" Click="ConnectButton_Click" />
+
+            <TextBlock Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,12,0,4"
+                       Text="Teams" FontWeight="Bold" />
+            <ListBox x:Name="teamListBox" Grid.Row="2" Grid.Column="0" Grid.ColumnSpan="3" MinHeight="160"
+                     DisplayMemberPath="name" SelectionChanged="TeamListBox_SelectionChanged" />
+            <Button x:Name="setTeamButton" Grid.Row="3" Grid.Column="2" Margin="0,8,0,0" MinWidth="80" Padding="8,2"
+                    Content="Set Team" IsEnabled="False" Click="SetTeamButton_Click" />
+            <TextBlock x:Name="teamStatusTextBlock" Grid.Row="4" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,8,0,0"
+                       TextWrapping="Wrap" Text="Connect to Team Hundo, choose a team, then set it to begin auto-tracking." />
+        </Grid>
     </DockPanel>
 </Window>

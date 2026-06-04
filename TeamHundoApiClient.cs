@@ -14,7 +14,7 @@ namespace card_overview_wpf
     public class TeamHundoApiClient : IDisposable
     {
         private const int FirehoseReconnectDelayMilliseconds = 2000;
-        private const string DefaultBaseApiUrl = "https://hundo.maika.moe";
+        public const string DefaultBaseApiUrl = "https://hundo.maika.moe";
 
         private readonly string baseApiUrl;
         private readonly JavaScriptSerializer serializer = new JavaScriptSerializer();
